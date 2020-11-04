@@ -5,10 +5,16 @@
 
 (defn- ceil-map-values [m]
   (medley/map-vals
-    #(int (Math/ceil %))
-    m)
+    (fn [val]
+      (if (map? val)
+        (ceil-map-values val)
+        (int (Math/ceil val))))
+    m))
 
-  #_m)
+(deftest test-ceil-map-values
+  (is (= {:a 1 :b {:bb 2} :c {:d 10 :e 2 :f {:g 1}}}
+         (ceil-map-values
+           {:a 0.1 :b {:bb 5/4} :c {:d 10 :e 2.0 :f {:g 10/10}}}))))
 
 (defn- all-buildings-related-to-product [product-type]
   (let [building (get values/outputs product-type)]
@@ -165,10 +171,7 @@
             :potato-farm 2/3,
             :sheep-farm 8/13}))))
 
-(defn- minimum-buildings [residences]
-  (->> residences
-       required-production-buildings-fractions-for-residences
-       ceil-map-values))
+(defn supported-population [buildings])
 
 (defn- required-workforce [buildings]
   (->> buildings
@@ -182,18 +185,19 @@
     (is (= {:farmer 50} (required-workforce {:fishery 2})))))
 
 (defn- residences-required-for-buildings [wanted-buildings]
-  (loop [buildings wanted-buildings]
-    (let [workforce (required-workforce buildings)
-          new-buildings (->> workforce
+  (loop [building-fractions wanted-buildings]
+    (let [new-buildings (->> building-fractions
+                             required-workforce
                              required-production-buildings-fractions-for-residences
                              (merge-with max wanted-buildings))]
-      (if (= buildings new-buildings)
-        (let [workforce-without-ratios (ceil-map-values workforce)]
+      (if (= building-fractions new-buildings)
+        (let [workforce (->> building-fractions
+                             ceil-map-values
+                             required-workforce)]
           {:workforce workforce
-           :buildings (->> workforce-without-ratios
+           :buildings (->> workforce
                            required-production-buildings-fractions-for-residences
-                           (merge-with max wanted-buildings)
-                           ceil-map-values)})
+                           (merge-with max wanted-buildings))})
         (recur new-buildings)))))
 
 (defn- full-capacity-buildings [residences]
@@ -208,10 +212,10 @@
   ([wanted-buildings]
 
    (let [{wanted-workforce :workforce wanted-buildings :buildings} (residences-required-for-buildings wanted-buildings)
-         minimum-buildings (minimum-buildings wanted-workforce)
+         minimum-buildings (required-production-buildings-fractions-for-residences wanted-workforce)
          minimum-workforce (required-workforce minimum-buildings)
          full-buildings (full-capacity-buildings wanted-workforce)
-         full-workforce (ceil-map-values (required-workforce full-buildings))]
+         full-workforce (required-workforce full-buildings)]
      {:workforce (->> wanted-workforce
                       (medley/map-vals (partial hash-map :wanted))
                       (merge-with
